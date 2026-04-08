@@ -1,0 +1,13 @@
+# Build system
+package-lock.json
+/node-modules
+/node_modules/*
+
+# Temp or backup files
+*.bak
+*.old
+
+# Editor/OS junk
+.DS_Store
+Thumbs.db
+node_modules
