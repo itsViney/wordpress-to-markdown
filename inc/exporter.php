@@ -133,6 +133,29 @@ function viney_markdown_export_generate_post_md( $post ) {
 		'url'        => get_permalink( $post->ID ),
 	);
 
+	$meta_title = '';
+	$meta_desc  = '';
+
+	if ( function_exists( 'YoastSEO' ) ) {
+		$yoast_meta = YoastSEO()->meta->for_post( $post->ID );
+		if ( $yoast_meta ) {
+			$meta_title = $yoast_meta->title;
+			$meta_desc  = $yoast_meta->description;
+		}
+	}
+
+	if ( empty( $meta_title ) ) {
+		// Mock a singular context for wp_get_document_title if it returns the admin title.
+		$meta_title = wp_get_document_title();
+	}
+
+	if ( ! empty( $meta_title ) ) {
+		$frontmatter['meta_title'] = '"' . str_replace( '"', '\"', $meta_title ) . '"';
+	}
+	if ( ! empty( $meta_desc ) ) {
+		$frontmatter['meta_description'] = '"' . str_replace( '"', '\"', $meta_desc ) . '"';
+	}
+
 	$output = "---\n";
 	foreach ( $frontmatter as $key => $value ) {
 		$output .= "$key: $value\n";
