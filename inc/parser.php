@@ -155,7 +155,15 @@ function viney_markdown_export_handle_image_block( $block ) {
 		return '';
 	}
 
-	// If alt is empty, try to get it from the attachment metadata.
+	// If alt is empty, try to find it in the rendered innerHTML.
+	if ( ! $alt ) {
+		preg_match( '/alt="([^"]*)"/i', $block['innerHTML'], $alt_matches );
+		if ( ! empty( $alt_matches[1] ) ) {
+			$alt = $alt_matches[1];
+		}
+	}
+
+	// If alt is still empty, try to get it from the attachment metadata.
 	if ( ! $alt && $id ) {
 		$alt = get_post_meta( $id, '_wp_attachment_image_alt', true );
 	}
