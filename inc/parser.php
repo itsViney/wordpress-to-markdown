@@ -155,6 +155,11 @@ function viney_markdown_export_handle_image_block( $block ) {
 		return '';
 	}
 
+	// If alt is empty, try to get it from the attachment metadata.
+	if ( ! $alt && $id ) {
+		$alt = get_post_meta( $id, '_wp_attachment_image_alt', true );
+	}
+
 	return sprintf( '![%s](%s)', $alt, $url );
 }
 
@@ -179,6 +184,18 @@ function viney_markdown_export_html_to_md( $html ) {
 	$md = preg_replace( '/<h4[^>]*>(.*?)<\/h4>/is', "#### $1\n\n", $md );
 	$md = preg_replace( '/<h5[^>]*>(.*?)<\/h5>/is', "##### $1\n\n", $md );
 	$md = preg_replace( '/<h6[^>]*>(.*?)<\/h6>/is', "###### $1\n\n", $md );
+
+	// Images.
+	$md = preg_replace_callback( '/<img[^>]+>/i', function( $matches ) {
+		$img_tag = $matches[0];
+		preg_match( '/src="([^"]+)"/i', $img_tag, $src_matches );
+		preg_match( '/alt="([^"]*)"/i', $img_tag, $alt_matches );
+		
+		$src = $src_matches[1] ?? '';
+		$alt = $alt_matches[1] ?? '';
+		
+		return $src ? sprintf( '![%s](%s)', $alt, $src ) : '';
+	}, $md );
 
 	// Bold/Italic/Strikethrough.
 	$md = preg_replace( '/<(strong|b)[^>]*>(.*?)<\/\1>/is', '**$2**', $md );
