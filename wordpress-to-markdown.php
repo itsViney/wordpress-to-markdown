@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress to Markdown
  * Description: Exports website content (posts, pages, and custom post types) as Markdown files in a ZIP archive.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Andrew Viney, Antigravity
  * Github Repository: https://github.com/itsViney/wordpress-to-markdown
  */

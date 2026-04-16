@@ -133,14 +133,34 @@ function viney_markdown_export_generate_post_md( $post ) {
 		'url'        => get_permalink( $post->ID ),
 	);
 
+	// Add taxonomy terms.
+	$taxonomies = get_object_taxonomies( $post->post_type );
+	if ( ! empty( $taxonomies ) ) {
+		foreach ( $taxonomies as $taxonomy ) {
+			$terms = get_the_terms( $post->ID, $taxonomy );
+			if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+				$term_names = wp_list_pluck( $terms, 'name' );
+				$frontmatter[ $taxonomy ] = implode( ', ', $term_names );
+			}
+		}
+	}
+
 	$meta_title = '';
 	$meta_desc  = '';
 
 	if ( function_exists( 'YoastSEO' ) ) {
-		$yoast_meta = YoastSEO()->meta->for_post( $post->ID );
-		if ( $yoast_meta ) {
-			$meta_title = $yoast_meta->title;
-			$meta_desc  = $yoast_meta->description;
+		// Only call the Surface API if the post has explicit SEO data set.
+		// This prevents "leaks" from stale Indexables for posts without custom settings,
+		// which is common in non-production environments where optimization is disabled.
+		$has_custom_title = get_post_meta( $post->ID, '_yoast_wpseo_title', true );
+		$has_custom_desc  = get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true );
+
+		if ( $has_custom_title || $has_custom_desc ) {
+			$yoast_meta = YoastSEO()->meta->for_post( $post->ID );
+			if ( $yoast_meta ) {
+				$meta_title = $yoast_meta->title;
+				$meta_desc  = $yoast_meta->description;
+			}
 		}
 	}
 
