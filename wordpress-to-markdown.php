@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress to Markdown
  * Description: Exports website content (posts, pages, and custom post types) as Markdown files in a ZIP archive.
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Andrew Viney, Antigravity
  * Github Repository: https://github.com/itsViney/wordpress-to-markdown
  */
@@ -53,6 +53,7 @@ function viney_markdown_export_handle_request() {
 	$include_llms  = isset( $_POST['viney_markdown_export_include_llms'] ) && '1' === $_POST['viney_markdown_export_include_llms'];
 	$export_limits = isset( $_POST['export_limits'] ) ? (array) $_POST['export_limits'] : array();
 	$llm_limits    = isset( $_POST['llm_limits'] ) ? (array) $_POST['llm_limits'] : array();
+	$llm_files     = isset( $_POST['llm_files'] ) ? (array) $_POST['llm_files'] : array();
 
 	if ( empty( $post_types ) ) {
 		add_settings_error( 'viney_markdown_export', 'no_post_types', 'Please select at least one post type to export.', 'error' );
@@ -72,10 +73,11 @@ function viney_markdown_export_handle_request() {
 		'include_llms'  => $include_llms,
 		'export_limits' => $export_limits,
 		'llm_limits'    => $llm_limits,
+		'llm_files'     => $llm_files,
 	) );
 
 	// Trigger the file download.
-	$result = viney_markdown_export_run( $post_types, $post_statuses, $only_new, $include_llms, $export_limits, $llm_limits );
+	$result = viney_markdown_export_run( $post_types, $post_statuses, $only_new, $include_llms, $export_limits, $llm_limits, $llm_files );
 
 	if ( false === $result ) {
 		add_settings_error( 'viney_markdown_export', 'no_posts_found', "The exporter didn't find any posts to export with the options you selected.", 'error' );

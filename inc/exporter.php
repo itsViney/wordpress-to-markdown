@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles the export process.
  */
-function viney_markdown_export_run( $post_types, $post_statuses = array( 'publish' ), $only_new = false, $include_llms = false, $export_limits = array(), $llm_limits = array() ) {
+function viney_markdown_export_run( $post_types, $post_statuses = array( 'publish' ), $only_new = false, $include_llms = false, $export_limits = array(), $llm_limits = array(), $llm_files = array() ) {
 	if ( empty( $post_types ) ) {
 		return false;
 	}
@@ -50,6 +50,29 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 		$llms_content .= "---\n\n";
 	}
 
+	$post_type_llm_contents = array();
+	foreach ( $post_types as $pt ) {
+		if ( ! empty( $llm_files[ $pt ] ) ) {
+			$post_type_object = get_post_type_object( $pt );
+			$post_type_name   = $post_type_object ? $post_type_object->labels->name : ucfirst( $pt );
+			
+			$content  = "---\n";
+			$content .= "site_title: $site_title\n";
+			$content .= "site_url: $site_url\n";
+			$content .= "post_type: $pt\n";
+			$content .= "export_date: " . date( 'Y-m-d H:i:s' ) . "\n";
+			$content .= "---\n\n";
+			$content .= "# LLM Context - $post_type_name\n\n";
+			$content .= "This file contains an export of $post_type_name content from $site_title. It is formatted for optimal consumption by Large Language Models (LLMs). Each section starts with a Level 1 heading followed by metadata about the content.\n\n";
+			$content .= "---\n\n";
+
+			$post_type_llm_contents[ $pt ] = array(
+				'content' => $content,
+				'count'   => 0,
+			);
+		}
+	}
+
 	$exported_count = 0;
 	$processed_ids  = array();
 	$homepage_id    = (int) get_option( 'page_on_front' );
@@ -70,6 +93,11 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 			// Aggregate LLM file.
 			if ( $include_llms ) {
 				$llms_content .= viney_markdown_export_generate_llm_post_content( $homepage_post );
+			}
+			
+			if ( isset( $post_type_llm_contents['page'] ) ) {
+				$post_type_llm_contents['page']['content'] .= viney_markdown_export_generate_llm_post_content( $homepage_post );
+				$post_type_llm_contents['page']['count']++;
 			}
 
 			// Update per-post tracking.
@@ -108,7 +136,9 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 
 				// If we've reached both limits for this type, stop.
 				$export_limit_reached = $export_max > 0 && $type_export_count >= $export_max;
-				$llm_limit_reached    = ! $include_llms || ( $llm_max > 0 && $type_llm_count >= $llm_max );
+				
+				$needs_llm = $include_llms || isset( $post_type_llm_contents[ $post_type ] );
+				$llm_limit_reached = ! $needs_llm || ( $llm_max > 0 && $type_llm_count >= $llm_max );
 
 				if ( $export_limit_reached && $llm_limit_reached ) {
 					break;
@@ -119,8 +149,8 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 					continue;
 				}
 
-				// If only new is selected (and we're not doing a full LLM export), check per-post tracking.
-				if ( $only_new && ! $include_llms ) {
+				// If only new is selected (and we're not doing any LLM exports), check per-post tracking.
+				if ( $only_new && ! $needs_llm ) {
 					$post_last_run = get_post_meta( $post->ID, '_viney_markdown_export_last_run', true );
 					if ( $post_last_run && strtotime( $post->post_modified_gmt ) <= (int) $post_last_run ) {
 						continue;
@@ -138,9 +168,30 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 					$processed_this_post = true;
 				}
 
-				// Aggregate LLM file.
-				if ( $include_llms && ! $llm_limit_reached ) {
-					$llms_content .= viney_markdown_export_generate_llm_post_content( $post );
+				// Aggregate LLM files.
+				$added_to_llm = false;
+				if ( ! $llm_limit_reached ) {
+					$post_llm_content = '';
+
+					if ( $include_llms ) {
+						if ( empty( $post_llm_content ) ) {
+							$post_llm_content = viney_markdown_export_generate_llm_post_content( $post );
+						}
+						$llms_content .= $post_llm_content;
+						$added_to_llm = true;
+					}
+
+					if ( isset( $post_type_llm_contents[ $post_type ] ) ) {
+						if ( empty( $post_llm_content ) ) {
+							$post_llm_content = viney_markdown_export_generate_llm_post_content( $post );
+						}
+						$post_type_llm_contents[ $post_type ]['content'] .= $post_llm_content;
+						$post_type_llm_contents[ $post_type ]['count']++;
+						$added_to_llm = true;
+					}
+				}
+
+				if ( $added_to_llm ) {
 					$type_llm_count++;
 					$processed_this_post = true;
 				}
@@ -160,9 +211,15 @@ function viney_markdown_export_run( $post_types, $post_statuses = array( 'publis
 		return false;
 	}
 
-	// Save LLM file.
+	// Save LLM files.
 	if ( $include_llms ) {
 		file_put_contents( $base_dir . '/llms.md', $llms_content );
+	}
+
+	foreach ( $post_type_llm_contents as $post_type => $data ) {
+		if ( $data['count'] > 0 ) {
+			file_put_contents( $base_dir . '/' . $post_type . '_llms.md', $data['content'] );
+		}
 	}
 
 	// Create Zip.
@@ -258,29 +315,31 @@ function viney_markdown_export_get_post_seo_data( $post ) {
 	$meta_title = '';
 	$meta_desc  = '';
 
-	// Yoast data is often unreliable in local or dev environments.
-	if ( in_array( wp_get_environment_type(), array( 'local', 'development' ) ) ) {
-		return array(
-			'title'       => '',
-			'description' => '',
-		);
-	}
+	if ( function_exists( 'wpseo_replace_vars' ) ) {
+		// 1. Get the custom title/description from post meta if set.
+		$title_template = get_post_meta( $post->ID, '_yoast_wpseo_title', true );
+		$desc_template  = get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true );
 
-	if ( function_exists( 'YoastSEO' ) ) {
-		$has_custom_title = get_post_meta( $post->ID, '_yoast_wpseo_title', true );
-		$has_custom_desc  = get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true );
+		// 2. If not set, fall back to the Yoast post type default template.
+		$options = get_option( 'wpseo_titles' );
+		if ( empty( $title_template ) && is_array( $options ) ) {
+			$title_template = isset( $options['title-' . $post->post_type] ) ? $options['title-' . $post->post_type] : '%%title%% %%page%% %%sep%% %%sitename%%';
+		}
+		if ( empty( $desc_template ) && is_array( $options ) ) {
+			$desc_template = isset( $options['metadesc-' . $post->post_type] ) ? $options['metadesc-' . $post->post_type] : '';
+		}
 
-		if ( $has_custom_title || $has_custom_desc ) {
-			$yoast_meta = YoastSEO()->meta->for_post( $post->ID );
-			if ( $yoast_meta ) {
-				$meta_title = $yoast_meta->title;
-				$meta_desc  = $yoast_meta->description;
-			}
+		// 3. Replace the variables for this specific post.
+		if ( ! empty( $title_template ) ) {
+			$meta_title = wpseo_replace_vars( $title_template, $post );
+		}
+		if ( ! empty( $desc_template ) ) {
+			$meta_desc = wpseo_replace_vars( $desc_template, $post );
 		}
 	}
 
 	if ( empty( $meta_title ) ) {
-		$meta_title = wp_get_document_title();
+		$meta_title = $post->post_title;
 	}
 
 	return array(

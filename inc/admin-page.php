@@ -26,6 +26,8 @@ function viney_markdown_export_render_admin_page() {
 	$include_llms_pref = isset( $prefs['include_llms'] ) ? $prefs['include_llms'] : false;
 	$export_limits_pref = isset( $prefs['export_limits'] ) ? $prefs['export_limits'] : array();
 	$llm_limits_pref    = isset( $prefs['llm_limits'] ) ? $prefs['llm_limits'] : array();
+	$llm_files_pref     = isset( $prefs['llm_files'] ) ? $prefs['llm_files'] : array();
+	$has_any_llm        = $include_llms_pref || ! empty( array_filter( $llm_files_pref ) );
 
 	// Check if any posts have been exported before.
 	$has_exported_posts = count( get_posts( array(
@@ -42,7 +44,7 @@ function viney_markdown_export_render_admin_page() {
 		<p>Select the post types and statuses you would like to export as Markdown files. Each post will be created as an individual .md file and organized into folders by post type.</p>
 		
 		<?php settings_errors( 'viney_markdown_export' ); ?>
-
+		
 		<form method="post" action="">
 			<?php wp_nonce_field( 'viney_markdown_export_action', 'viney_markdown_export_nonce' ); ?>
 			
@@ -56,7 +58,8 @@ function viney_markdown_export_render_admin_page() {
 									<th style="width: 40px;"></th>
 									<th style="padding: 15px 10px;">Post Type</th>
 									<th style="width: 120px; padding: 15px 10px;">Limit post files</th>
-									<th class="viney-llm-column" style="padding: 15px 10px; width: 120px; <?php echo $include_llms_pref ? '' : 'display: none;'; ?>">Limit in llms.md</th>
+									<th style="width: 160px; padding: 15px 10px;">Include [type]_llms.md</th>
+									<th class="viney-llm-column" style="padding: 15px 10px; width: 120px; <?php echo $has_any_llm ? '' : 'display: none;'; ?>">Limit in llms.md</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -65,6 +68,7 @@ function viney_markdown_export_render_admin_page() {
 									$is_checked = in_array( $slug, $selected_types );
 									$export_max = isset( $export_limits_pref[ $slug ] ) ? $export_limits_pref[ $slug ] : '';
 									$llm_max    = isset( $llm_limits_pref[ $slug ] ) ? $llm_limits_pref[ $slug ] : '';
+									$llm_file_checked = ! empty( $llm_files_pref[ $slug ] );
 									?>
 									<tr>
 										<td>
@@ -76,7 +80,10 @@ function viney_markdown_export_render_admin_page() {
 										<td>
 											<input type="number" name="export_limits[<?php echo esc_attr( $slug ); ?>]" value="<?php echo esc_attr( $export_max ); ?>" min="1" step="1" style="width: 100%;">
 										</td>
-										<td class="viney-llm-column" style="<?php echo $include_llms_pref ? '' : 'display: none;'; ?>">
+										<td>
+											<input type="checkbox" class="viney-llm-file-checkbox" name="llm_files[<?php echo esc_attr( $slug ); ?>]" value="1" <?php checked( $llm_file_checked ); ?>>
+										</td>
+										<td class="viney-llm-column" style="<?php echo $has_any_llm ? '' : 'display: none;'; ?>">
 											<input type="number" name="llm_limits[<?php echo esc_attr( $slug ); ?>]" value="<?php echo esc_attr( $llm_max ); ?>" min="1" step="1" style="width: 100%;">
 										</td>
 									</tr>
@@ -137,27 +144,43 @@ function viney_markdown_export_render_admin_page() {
 			var onlyNewCheckbox = document.getElementById('viney_markdown_export_only_new');
 			var onlyNewWrapper = document.getElementById('viney_markdown_export_only_new_wrapper');
 			var llmColumns = document.querySelectorAll('.viney-llm-column');
+			var llmFileCheckboxes = document.querySelectorAll('.viney-llm-file-checkbox');
 
-			if (llmCheckbox) {
-				llmCheckbox.addEventListener('change', function() {
-					// Toggle LLM columns.
-					llmColumns.forEach(function(col) {
-						col.style.display = llmCheckbox.checked ? '' : 'none';
-					});
-
-					// Handle Only New checkbox.
-					if (onlyNewCheckbox) {
-						if (this.checked) {
-							onlyNewCheckbox.checked = false;
-							onlyNewCheckbox.disabled = true;
-							if (onlyNewWrapper) onlyNewWrapper.style.opacity = '0.5';
-						} else {
-							onlyNewCheckbox.disabled = false;
-							if (onlyNewWrapper) onlyNewWrapper.style.opacity = '1';
-						}
+			function updateVisibility() {
+				var showLLM = false;
+				if (llmCheckbox && llmCheckbox.checked) {
+					showLLM = true;
+				}
+				llmFileCheckboxes.forEach(function(cb) {
+					if (cb.checked) {
+						showLLM = true;
 					}
 				});
+
+				llmColumns.forEach(function(col) {
+					col.style.display = showLLM ? '' : 'none';
+				});
+
+				if (onlyNewCheckbox) {
+					if (llmCheckbox && llmCheckbox.checked) {
+						onlyNewCheckbox.checked = false;
+						onlyNewCheckbox.disabled = true;
+						if (onlyNewWrapper) onlyNewWrapper.style.opacity = '0.5';
+					} else {
+						onlyNewCheckbox.disabled = false;
+						if (onlyNewWrapper) onlyNewWrapper.style.opacity = '1';
+					}
+				}
 			}
+
+			if (llmCheckbox) {
+				llmCheckbox.addEventListener('change', updateVisibility);
+			}
+			llmFileCheckboxes.forEach(function(cb) {
+				cb.addEventListener('change', updateVisibility);
+			});
+
+			updateVisibility();
 		})();
 
 		/**
